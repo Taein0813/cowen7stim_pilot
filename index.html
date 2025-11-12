@@ -185,25 +185,25 @@ order.forEach(e => timeline.push(...buildBlock(e)));
 timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `<h2>감사합니다!</h2><p>결과가 저장되었습니다.</p>`,
-  choices: ["CSV 다운로드", "닫기"],
-  on_finish: (d) => {
-    if(d.response === 0){
-      const blob = new Blob([jsPsych.data.get().csv()],{type:"text/csv"});
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href = url; a.download = `cowen7_${Date.now()}.csv`;
-      a.click();
-    }
-    // 전체 백업 (옵션) - fire-and-forget
+  choices: ["닫기"],
+  on_finish: () => {
+    // 전체 백업 (fire-and-forget)
     try{
       fetch(GS_WEBAPP_URL, {
-        method:"POST", mode:"no-cors",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ kind:"cowen7_rating_full", data: jsPsych.data.get().values() })
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "cowen7_rating_full",
+          data: jsPsych.data.get().values()
+        })
       });
-    }catch(e){ /* 무시 */ }
+    } catch(e) {
+      console.warn("업로드 실패(무시 가능):", e);
+    }
   }
 });
+
 
 jsPsych.run(timeline);
 </script>
