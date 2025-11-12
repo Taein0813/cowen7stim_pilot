@@ -5,15 +5,17 @@
   <title>Cowen7 감정 실험</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- ✅ 로컬 jsPsych 파일 -->
+  <!-- jsPsych CSS (원하면 로컬로 바꿔도 됨) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/css/jspsych.css" />
+
+  <!-- ✅ 로컬 jsPsych 스크립트 -->
   <script src="./jspsych/jspsych.js"></script>
   <script src="./jspsych/plugins/jspsych-preload.js"></script>
   <script src="./jspsych/plugins/jspsych-html-button-response.js"></script>
   <script src="./jspsych/plugins/jspsych-survey-html-form.js"></script>
 
   <style>
-    body { max-width: 980px; margin: 0 auto; padding: 24px; font-family: sans-serif; }
+    body { max-width: 980px; margin: 0 auto; padding: 24px; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
     .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#f3f4f6; font-size:12px; }
     .muted { color:#666; font-size: 0.9rem; }
     .note { background:#f8fafc; border:1px dashed #cbd5e1; padding:10px; border-radius:8px; }
@@ -25,6 +27,9 @@
     #jspsych-html-button-response-btngroup { position: sticky; bottom: 0; background: rgba(255,255,255,0.96); backdrop-filter: saturate(140%) blur(6px); padding: 12px; border-top: 1px solid #e5e7eb; display: flex; gap: 10px; justify-content: space-between; z-index: 30; }
     .jspsych-btn { flex: 1; padding: 14px 16px; border-radius: 999px; font-size: 1.05rem; }
     .jspsych-content { max-width: 720px; margin: 0 auto; }
+    .fatal { background:#fff1f2; color:#b91c1c; border:1px solid #fecdd3; padding:12px; border-radius:10px; }
+    .progress { height: 8px; background:#e5e7eb; border-radius:8px; overflow:hidden; }
+    .progress > div { height: 100%; width: 0%; background:#3b82f6; transition: width .2s; }
     @media (min-width: 1024px){
       .pair-wrap { grid-template-columns: 1fr 1fr; }
       #jspsych-html-button-response-btngroup { position: static; backdrop-filter: none; }
@@ -32,14 +37,30 @@
   </style>
 </head>
 <body>
-  <div id="jspsych-target">로딩 중...</div>
+  <div id="jspsych-target">로딩 중…</div>
 
 <script>
+/* ====== 로드 확인 ====== */
+(function(){
+  const mount = document.getElementById('jspsych-target');
+  function fatal(msg, detail){
+    mount.innerHTML = '<div class="fatal"><b>오류:</b> '+msg+(detail?('<br><small>'+detail+'</small>'):'')+'</div>';
+    throw new Error(msg+' '+(detail||''));
+  }
+  if(typeof initJsPsych !== 'function'){
+    fatal('jsPsych 로드 실패.','경로 확인: ./jspsych/jspsych.js / plugins/*.js');
+  }
+  const required = ['jsPsychPreload','jsPsychHtmlButtonResponse'];
+  const missing = required.filter(n => typeof window[n] !== 'function');
+  if(missing.length){
+    fatal('플러그인 로드 실패: '+missing.join(', '),'plugins 폴더/파일명 확인');
+  }
+})();
+
 /***********************
  * 사용자 설정
  ***********************/
 const ROOT = "./Cowen7";
-
 const EMOTIONS = [
   { key: 'energetic', label_ko: '에너지가 넘치는', label_en: 'energetic' },
   { key: 'tense',     label_ko: '불안한',         label_en: 'tense' },
@@ -49,7 +70,6 @@ const EMOTIONS = [
   { key: 'sad',       label_ko: '슬픈',           label_en: 'sad' },
   { key: 'love',      label_ko: '사랑에 빠진',     label_en: 'in love' },
 ];
-
 const EXT = "mp3";
 const COUNT = 10;
 const GS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyowrSqY3hw71XR7qIqzAHyhm4iUnh27x-Q9qW3zmvboKudPemd3OQLLIaIs2SmX0XP/exec";
@@ -61,45 +81,21 @@ const jsPsych = initJsPsych({ display_element: "jspsych-target" });
 const timeline = [];
 
 /***********************
- * 참가자 정보
- ***********************/
-timeline.push({
-  type: jsPsychSurveyHtmlForm,
-  preamble: `<h2>참가자 정보</h2>`,
-  html: `
-    <label>참가자 ID *</label><br>
-    <input name="pid" type="text" required style="width:260px;padding:6px;"><br><br>
-    <label>기기</label><br>
-    <select name="device" style="width:260px;padding:6px;">
-      <option>모바일(iOS)</option>
-      <option>모바일(Android)</option>
-      <option>데스크탑</option>
-    </select>
-    <div class="note" style="margin-top:8px;">상은 <b>최대 5개 권장</b>입니다.</div>
-  `,
-  button_label: "시작하기",
-  on_finish: d => {
-    const r = JSON.parse(d.response);
-    jsPsych.data.addProperties({ pid: r.pid, device: r.device });
-  }
-});
-
-/***********************
- * 안내문
+ * 안내문 (ID 입력 제거)
  ***********************/
 timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `
     <h2>감정별 상/중/하 분류 실험</h2>
     <div class="note">
-      <ul>
-        <li>각 곡은 원하는 만큼 재생 가능합니다.</li>
-        <li>상은 최대 5개 권장입니다(강제 아님).</li>
-        <li>총 7개 감정 페이지로 구성되어 있습니다.</li>
+      <ul style="margin:0 0 8px 16px;">
+        <li>각 곡은 원하는 만큼 재생할 수 있습니다.</li>
+        <li>각 감정마다 10곡이 제시됩니다.</li>
+        <li>각 곡을 듣고 <b>상/중/하</b> 중 하나로 분류해 주세요.</li>
       </ul>
     </div>
   `,
-  choices: ["시작"]
+  choices: ["시작하기"]
 });
 
 /***********************
@@ -108,7 +104,23 @@ timeline.push({
 function buildBlock(emotion){
   const paths = Array.from({length:COUNT},(_,i)=>`${ROOT}/${emotion.key}/${emotion.key}${i+1}.${EXT}`);
 
-  const preload = { type: jsPsychPreload, audio: paths };
+  // ✅ 프리로드 화면: 진행바/퍼센트 표시
+  const preload = {
+    type: jsPsychPreload,
+    audio: paths,
+    show_progress_bar: true,
+    message: `<h3>${emotion.label_ko} (${emotion.label_en}) 자극 불러오는 중…</h3>
+              <div class="progress"><div id="bar" style="width:0%"></div></div>
+              <p class="muted" id="pct" style="margin-top:6px;">0%</p>`,
+    continue_after_error: true,
+    on_progress_update: (info)=>{
+      const pct = Math.round((info.loaded / info.total) * 100);
+      const elBar = document.getElementById('bar');
+      const elPct = document.getElementById('pct');
+      if(elBar) elBar.style.width = pct + '%';
+      if(elPct) elPct.textContent = pct + '%';
+    }
+  };
 
   const trial = {
     type: jsPsychHtmlButtonResponse,
@@ -117,7 +129,7 @@ function buildBlock(emotion){
       const items = paths.map((p,i)=>`
         <div class="audio-card" data-id="${i}">
           <div class="note">
-            <ul>
+            <ul style="margin:0 0 6px 16px;">
               <li>“<b>${emotion.label_ko}</b>” 감정에 잘 맞는가?</li>
               <li>이 곡을 들었을 때 다른 감정(<b>${others}</b>) 6개와 헷갈리지 않고 <b>${emotion.label_ko}</b>을 선택할 수 있어야 함</li>
             </ul>
@@ -133,31 +145,36 @@ function buildBlock(emotion){
         </div>`).join("");
 
       return `
-        <h3>카테고리: ${emotion.label_ko} (${emotion.label_en})</h3>
-        <p class="muted">상은 최대 5개 권장</p>
+        <h3>카테고리: ${emotion.label_ko} <span class="muted">(${emotion.label_en})</span></h3>
         <div class="pair-wrap">${items}</div>`;
     },
     choices: ["분류 완료"],
     on_load: () => {
-      const sel = {}; let topCount = 0;
+      const sel = {};
+      // 버튼 클릭해서 선택 저장
       document.body.addEventListener("click", e=>{
         const b = e.target.closest("button.bucket");
         if(!b) return;
         const card = b.closest(".audio-card");
         const id = Number(card.dataset.id);
-        const prev = sel[id];
-        if(prev==="TOP") topCount--;
         sel[id] = b.dataset.bucket;
-        if(b.dataset.bucket==="TOP") topCount++;
         card.querySelector(".chosen").textContent = b.textContent;
-      });
+      }, { passive:true });
+      // 동시에 재생 방지
+      const auds = Array.from(document.querySelectorAll('audio'));
+      auds.forEach(A=>A.addEventListener('play', ()=>auds.forEach(B=>{ if(B!==A && !B.paused) B.pause(); })));
       window._sel = sel;
     },
     on_finish: async () => {
-      const data = Object.entries(window._sel).map(([id,b])=>({id,bucket:b}));
+      const data = Object.entries(window._sel||{}).map(([id,b])=>({id:Number(id),bucket:b}));
       jsPsych.data.write({ emotion: emotion.key, allocations: data });
-      await fetch(GS_WEBAPP_URL, {method:"POST",mode:"no-cors",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({kind:"cowen7_likert_block", emotion:emotion.key, allocations:data})});
+      try{
+        await fetch(GS_WEBAPP_URL, {
+          method:"POST", mode:"no-cors",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({kind:"cowen7_likert_block", emotion:emotion.key, allocations:data})
+        });
+      }catch(e){ console.warn('업로드 실패(무시 가능):', e); }
     }
   };
 
@@ -172,13 +189,15 @@ EMOTIONS.forEach(e => timeline.push(...buildBlock(e)));
 timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `<h2>감사합니다!</h2><p>결과가 저장되었습니다.</p>`,
-  choices: ["CSV 다운로드"],
-  on_finish: () => {
-    const blob = new Blob([jsPsych.data.get().csv()],{type:"text/csv"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `cowen7_${Date.now()}.csv`;
-    a.click();
+  choices: ["CSV 다운로드", "닫기"],
+  on_finish: (d) => {
+    if(d.response === 0){
+      const blob = new Blob([jsPsych.data.get().csv()],{type:"text/csv"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `cowen7_${Date.now()}.csv`;
+      a.click();
+    }
   }
 });
 
