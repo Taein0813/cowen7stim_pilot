@@ -17,24 +17,14 @@
     .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#f3f4f6; font-size:12px; }
     .muted { color:#666; font-size: 0.9rem; }
     .note { background:#f8fafc; border:1px dashed #cbd5e1; padding:10px; border-radius:8px; }
-
-    /* Mobile-first: 세로 스크롤 최적화 */
     .pair-wrap { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 12px; }
     .audio-card { border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px; }
     .audio-card .label { font-weight: 800; font-size: 1rem; }
     audio { width: 100%; height: 40px; }
-
-    /* 상단 제목 sticky */
     .jspsych-content h3:first-of-type { position: sticky; top: 0; background: #fff; padding: 8px 0; z-index: 20; border-bottom: 1px solid #eee; }
-
-    /* 버튼 바 하단 고정 느낌 */
     #jspsych-html-button-response-btngroup { position: sticky; bottom: 0; background: rgba(255,255,255,0.96); backdrop-filter: saturate(140%) blur(6px); padding: 12px; border-top: 1px solid #e5e7eb; display: flex; gap: 10px; justify-content: space-between; z-index: 30; }
     .jspsych-btn { flex: 1; padding: 14px 16px; border-radius: 999px; font-size: 1.05rem; }
-
-    /* 내용 폭 제한 */
     .jspsych-content { max-width: 720px; margin: 0 auto; }
-
-    /* 데스크탑에서 2열 */
     @media (min-width: 1024px){
       .pair-wrap { grid-template-columns: 1fr 1fr; }
       #jspsych-html-button-response-btngroup { position: static; backdrop-filter: none; }
@@ -42,7 +32,7 @@
   </style>
 </head>
 <body>
-  <div id="jspsych-target"></div>
+  <div id="jspsych-target">로딩 중…</div>
 
 <script>
 /***********************
@@ -100,7 +90,7 @@ async function sendBlockToSheet(payload){
   try{
     await fetch(GS_WEBAPP_URL, {
       method: 'POST',
-      mode: 'no-cors',         // 응답을 읽지 않아도 되므로 no-cors로 안전 전송
+      mode: 'no-cors',         // 응답을 읽지 않아도 되므로 no-cors
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
@@ -257,25 +247,26 @@ function buildLikertBlock(emotion){
       window.__likertSelection = { selection };
     },
     on_finish: async function(){
-      const { selection } = window.__likertSelection || { selection:{} };
+      // ⚠️ 여기서 selection을 안전하게 읽어오기 (이전 버그 수정)
+      const sel = (window.__likertSelection && window.__likertSelection.selection) ? window.__likertSelection.selection : {};
       const pid = jsPsych.data.get().values()[0]?.pid || '';
       const device = jsPsych.data.get().values()[0]?.device || '';
       const ua = jsPsych.data.get().values()[0]?.ua || navigator.userAgent;
       const tz = jsPsych.data.get().values()[0]?.tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      // 블록(감정) 단위로 즉시 업로드
+      // 블록(감정) 단위 업로드
       const block_payload = {
         kind: 'cowen7_likert_block',
         pid, device, ua, tz,
         emotion_key: emotion.key,
         emotion_label_ko: emotion.label_ko,
         timestamp: new Date().toISOString(),
-        allocations: items.map(it=>({ file: it.name, path: it.path, bucket: (window.__likertSelection.selection[it.id]||null) }))
+        allocations: items.map(it=>({ file: it.name, path: it.path, bucket: (sel[it.id] ?? null) }))
       };
       await sendBlockToSheet(block_payload);
 
       // jsPsych 데이터에도 기록
-      const result = items.map(it=>({ id: it.id, file: it.name, path: it.path, bucket: window.__likertSelection.selection[it.id]||null }));
+      const result = items.map(it=>({ id: it.id, file: it.name, path: it.path, bucket: (sel[it.id] ?? null) }));
       jsPsych.data.write({ trial_kind: 'emotion_likert', emotion: emotion.key, allocations: result });
     }
   };
@@ -326,22 +317,20 @@ timeline.push({
     const blob = new Blob([csv], {type:'text/csv'});
     const url = URL.createObjectURL(blob);
 
-    // 버튼 0: CSV 다운로드
     if(data.response === 0){
       const a = document.createElement('a');
       a.href = url; a.download = `cowen7_likert_${Date.now()}.csv`;
       a.click();
     }
 
-    // 전체 백업 JSON도 시트에 업로드(선택)
-    const pid = jsPsych.data.get().values()[0]?.pid || '';
-    const device = jsPsych.data.get().values()[0]?.device || '';
-    const ua = jsPsych.data.get().values()[0]?.ua || navigator.userAgent;
-    const tz = jsPsych.data.get().values()[0]?.tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
-
+    // 전체 백업 JSON 업로드(선택)
+    const first = jsPsych.data.get().values()[0] || {};
     const full_payload = {
       kind: 'cowen7_likert_full',
-      pid, device, ua, tz,
+      pid: first.pid || '',
+      device: first.device || '',
+      ua: first.ua || navigator.userAgent,
+      tz: first.tz || Intl.DateTimeFormat().resolvedOptions().timeZone,
       timestamp: new Date().toISOString(),
       data: jsPsych.data.get().values()
     };
