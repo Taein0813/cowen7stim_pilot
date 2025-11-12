@@ -149,9 +149,7 @@ function buildBlock(emotion){
       // 다음 단계에서 읽을 수 있게 저장
       window.__currentSel = sel;
     },
-    on_finish: () => {
-      const data = Object.entries(window.__currentSel||{}).map(([id,s])=>({id:Number(id),score:s}));
-      jsPsych.data.write({ emotion: emotion.key, allocations: data });
+      jsPsych.data.get().addToLast({ emotion: emotion.key, allocations: data });  // ✅ 안전
       // 업로드는 fire-and-forget
       try{
         fetch(GS_WEBAPP_URL, {
