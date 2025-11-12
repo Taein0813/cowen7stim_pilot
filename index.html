@@ -4,22 +4,28 @@
   <meta charset="utf-8" />
   <title>Cowen7 감정 실험 (5점 척도)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- jsPsych CSS (원하면 로컬로 교체 가능) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/css/jspsych.css" />
-  <!-- 로컬 jsPsych -->
+
+  <!-- ✅ 로컬 jsPsych 스크립트 -->
   <script src="./jspsych/jspsych.js"></script>
   <script src="./jspsych/plugins/jspsych-html-button-response.js"></script>
+
   <style>
     body { max-width: 980px; margin: 0 auto; padding: 24px; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
     .note { background:#f8fafc; border:1px dashed #cbd5e1; padding:10px; border-radius:8px; }
     .pair-wrap { display:grid; grid-template-columns:1fr; gap:16px; margin-top:12px; }
     .audio-card { border:1px solid #e5e7eb; border-radius:14px; padding:14px; }
-    audio { width:100%; height:40px; }
-    .jspsych-btn { flex:1; padding:14px 16px; border-radius:999px; font-size:1.05rem; }
-    .scale { display:flex; justify-content:space-between; align-items:center; margin-top:8px; gap:4px; }
-    .scale button { flex:1; border:1px solid #d1d5db; border-radius:6px; padding:8px 0; background:#fff; }
-    .scale button.selected { background:#2563eb; color:white; font-weight:600; }
     .muted { color:#666; font-size:0.9rem; }
+    audio { width:100%; height:40px; }
+    .scale { display:flex; align-items:center; gap:6px; margin-top:8px; }
+    .scale .label { white-space:nowrap; }
+    .scale .nums { display:flex; gap:4px; flex:1; justify-content:space-between; }
+    .scale .nums button { flex:1; border:1px solid #d1d5db; border-radius:6px; padding:8px 0; background:#fff; }
+    .scale .nums button.selected { background:#2563eb; color:#fff; font-weight:600; border-color:#2563eb; }
     .fatal { background:#fff1f2; color:#b91c1c; border:1px solid #fecdd3; padding:12px; border-radius:10px; }
+    .jspsych-content { max-width: 720px; margin: 0 auto; }
     @media (min-width: 1024px){
       .pair-wrap { grid-template-columns: 1fr 1fr; }
       #jspsych-html-button-response-btngroup { position: static; }
@@ -30,7 +36,7 @@
   <div id="jspsych-target"></div>
 
 <script>
-/* 전역 에러 캡처: 문제가 생기면 화면에 원인 표시 */
+/* 전역 에러 캡처: 에러 발생 시 화면에 원인 표시 */
 window.addEventListener('error', (e)=>{
   const m = document.getElementById('jspsych-target');
   if(m){
@@ -46,7 +52,7 @@ window.addEventListener('error', (e)=>{
   if(typeof jsPsychHtmlButtonResponse !== 'function') fatal('플러그인 로드 실패: jsPsychHtmlButtonResponse.');
 })();
 
-/* 설정 */
+/* ===== 설정 ===== */
 const ROOT = "./Cowen7";
 const EMOTIONS = [
   { key:'energetic', label_ko:'에너지가 넘치는', label_en:'energetic' },
@@ -61,33 +67,34 @@ const EXT = "mp3";
 const COUNT = 10;
 const GS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyowrSqY3hw71XR7qIqzAHyhm4iUnh27x-Q9qW3zmvboKudPemd3OQLLIaIs2SmX0XP/exec";
 
-/* jsPsych */
+/* ===== jsPsych ===== */
 const jsPsych = initJsPsych({ display_element: "jspsych-target" });
 const timeline = [];
 
-/* 안내 */
+/* ===== 안내 ===== */
 timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `
     <h2>감정별 5점 척도 평가 실험</h2>
     <div class="note">
       <ul style="margin:0 0 8px 16px;">
-        <li>각 감정(무작위 순서)마다 10곡이 제시됩니다.</li>
+        <li>감정 순서는 무작위입니다. 각 감정마다 10곡이 제시됩니다.</li>
         <li>각 곡은 원하는 만큼 재생할 수 있습니다.</li>
         <li>각 곡이 해당 감정에 <b>얼마나 적절한지</b> 1~5점으로 평가해 주세요.</li>
-        <li>(1=부적절함, 5=적절함)</li>
+        <li>(<b>1=부적절함</b> … <b>5=적절함</b>)</li>
       </ul>
     </div>
   `,
   choices: ["시작하기"]
 });
 
-/* 감정 블록 */
+/* ===== 감정 블록 (5점 척도) ===== */
 function buildBlock(emotion){
   const paths = Array.from({length:COUNT},(_,i)=>`${ROOT}/${emotion.key}/${emotion.key}${i+1}.${EXT}`);
 
   return [{
     type: jsPsychHtmlButtonResponse,
+    data: { emotion: emotion.key },          // ✅ 이후 addToLast로 병합
     stimulus: () => {
       const others = EMOTIONS.filter(e=>e.key!==emotion.key).map(e=>e.label_ko).join(", ");
       const items = paths.map((p,i)=>`
@@ -101,9 +108,11 @@ function buildBlock(emotion){
           <div><b>${i+1}. ${p.split("/").pop()}</b></div>
           <audio src="${p}" controls preload="metadata" playsinline></audio>
           <div class="scale" role="group" aria-label="적절성 5점 척도">
-            <span class="muted">(부적절함)</span>
-            ${[1,2,3,4,5].map(v=>`<button class="score" data-score="${v}" type="button">${v}</button>`).join('')}
-            <span class="muted">(적절함)</span>
+            <span class="label muted">(부적절함)</span>
+            <div class="nums">
+              ${[1,2,3,4,5].map(v=>`<button class="score" data-score="${v}" type="button">${v}</button>`).join('')}
+            </div>
+            <span class="label muted">(적절함)</span>
           </div>
         </div>`).join("");
 
@@ -113,7 +122,7 @@ function buildBlock(emotion){
     },
     choices: ["평가 완료"],
     on_load: () => {
-      const wrap = document.getElementById('pair-wrap');        // ✅ 컨테이너에만 바인딩 (누적 방지)
+      const wrap     = document.getElementById('pair-wrap');   // ✅ 컨테이너 단위 바인딩 (누적/충돌 방지)
       const btnGroup = document.getElementById('jspsych-html-button-response-btngroup');
       const doneBtn  = btnGroup ? btnGroup.querySelector('button') : null;
       const remainEl = document.getElementById('remain');
@@ -129,13 +138,14 @@ function buildBlock(emotion){
       }
       updateButton();
 
-      // 점수 클릭(컨테이너 이벤트 위임)
+      // 점수 클릭 (컨테이너 위임)
       wrap.addEventListener('click', (e)=>{
         const b = e.target.closest('button.score');
         if(!b) return;
         const card = b.closest('.audio-card');
         const id = Number(card.dataset.id);
-        sel[id] = Number(b.dataset.score);
+        const score = Number(b.dataset.score);
+        sel[id] = score;
         // 선택 표시 토글
         card.querySelectorAll('button.score').forEach(x=>x.classList.remove('selected'));
         b.classList.add('selected');
@@ -146,16 +156,21 @@ function buildBlock(emotion){
       const auds = Array.from(wrap.querySelectorAll('audio'));
       auds.forEach(A=>A.addEventListener('play', ()=>auds.forEach(B=>{ if(B!==A && !B.paused) B.pause(); })));
 
-      // 다음 단계에서 읽을 수 있게 저장
+      // 다음 단계에서 읽기
       window.__currentSel = sel;
     },
-      jsPsych.data.get().addToLast({ emotion: emotion.key, allocations: data });  // ✅ 안전
-      // 업로드는 fire-and-forget
+    on_finish: () => {
+      const data = Object.entries(window.__currentSel||{}).map(([id,s])=>({id:Number(id),score:s}));
+
+      // ✅ v7 안전한 추가 방법: 마지막 트라이얼에 병합
+      jsPsych.data.get().addToLast({ allocations: data });
+
+      // 업로드는 fire-and-forget (대기하지 않음 → 다음 블록 즉시 진행)
       try{
         fetch(GS_WEBAPP_URL, {
           method:"POST", mode:"no-cors",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({ kind:"cowen7_rating_block", emotion:emotion.key, allocations:data })
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({ kind:"cowen7_rating_block", emotion: emotion.key, allocations: data })
         });
       }catch(e){ /* 무시 */ }
     }
@@ -166,7 +181,7 @@ function buildBlock(emotion){
 const order = EMOTIONS.slice().sort(()=>Math.random()-0.5);
 order.forEach(e => timeline.push(...buildBlock(e)));
 
-/* 종료 */
+/* ===== 종료 ===== */
 timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `<h2>감사합니다!</h2><p>결과가 저장되었습니다.</p>`,
@@ -174,16 +189,17 @@ timeline.push({
   on_finish: (d) => {
     if(d.response === 0){
       const blob = new Blob([jsPsych.data.get().csv()],{type:"text/csv"});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
       a.href = url; a.download = `cowen7_${Date.now()}.csv`;
       a.click();
     }
+    // 전체 백업 (옵션) - fire-and-forget
     try{
       fetch(GS_WEBAPP_URL, {
         method:"POST", mode:"no-cors",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({ kind:"cowen7_rating_full", data: jsPsych.data.get().values() })
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ kind:"cowen7_rating_full", data: jsPsych.data.get().values() })
       });
     }catch(e){ /* 무시 */ }
   }
