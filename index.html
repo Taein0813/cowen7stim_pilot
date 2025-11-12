@@ -91,7 +91,7 @@ timeline.push({
       <ul style="margin:0 0 8px 16px;">
         <li>각 곡은 원하는 만큼 재생할 수 있습니다.</li>
         <li>각 감정마다 10곡이 제시됩니다.</li>
-        <li>각 곡을 듣고 <b>상/중/하</b> 중 하나로 분류해 주세요.</li>
+        <li>각 곡을 듣고 감정이 잘 표현된 정도에 따라 <b>상/중/하</b> 중 하나로 분류해 주세요.</li>
       </ul>
     </div>
   `,
@@ -130,8 +130,8 @@ function buildBlock(emotion){
         <div class="audio-card" data-id="${i}">
           <div class="note">
             <ul style="margin:0 0 6px 16px;">
-              <li>“<b>${emotion.label_ko}</b>” 감정에 잘 맞는가?</li>
-              <li>이 곡을 들었을 때 다른 감정(<b>${others}</b>) 6개와 헷갈리지 않고 <b>${emotion.label_ko}</b>을 선택할 수 있어야 함</li>
+              <li>1. “<b>${emotion.label_ko}</b>” 감정을 잘 표현하고 있는가</li>
+              <li>2. 다른 감정(<b>${others}</b>) 6개와 헷갈리지 않고 <b>${emotion.label_ko}</b>을 선택할 만한가</li>
             </ul>
           </div>
           <div class="label">${i+1}. ${p.split("/").pop()}</div>
