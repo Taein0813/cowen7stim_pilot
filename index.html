@@ -2,18 +2,18 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <title>Cowen7 감정 실험 (상/중/하 · Google Sheets 저장)</title>
+  <title>Cowen7 감정 실험</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- ✅ jsPsych UMD 빌드 (전역 변수 제공) -->
-  <link rel="stylesheet" href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" />
-  <script src="https://unpkg.com/jspsych@7.3.4/dist/jspsych.js"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-preload@1.1.3/dist/index.js"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.2.0/dist/index.js"></script>
-  <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@1.2.0/dist/index.js"></script>
+  <!-- ✅ 로컬 jsPsych 파일 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/css/jspsych.css" />
+  <script src="./jspsych/jspsych.js"></script>
+  <script src="./jspsych/plugins/jspsych-preload.js"></script>
+  <script src="./jspsych/plugins/jspsych-html-button-response.js"></script>
+  <script src="./jspsych/plugins/jspsych-survey-html-form.js"></script>
 
   <style>
-    body { max-width: 980px; margin: 0 auto; padding: 24px; }
+    body { max-width: 980px; margin: 0 auto; padding: 24px; font-family: sans-serif; }
     .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#f3f4f6; font-size:12px; }
     .muted { color:#666; font-size: 0.9rem; }
     .note { background:#f8fafc; border:1px dashed #cbd5e1; padding:10px; border-radius:8px; }
@@ -32,13 +32,13 @@
   </style>
 </head>
 <body>
-  <div id="jspsych-target">로딩 중…</div>
+  <div id="jspsych-target">로딩 중...</div>
 
 <script>
 /***********************
  * 사용자 설정
  ***********************/
-const ROOT = "./Cowen7"; // 레포 루트에 Cowen7 폴더 포함
+const ROOT = "./Cowen7";
 
 const EMOTIONS = [
   { key: 'energetic', label_ko: '에너지가 넘치는', label_en: 'energetic' },
@@ -50,289 +50,138 @@ const EMOTIONS = [
   { key: 'love',      label_ko: '사랑에 빠진',     label_en: 'in love' },
 ];
 
-const AUTO_FILENAMES = true;
-const EXT = 'mp3';
-const COUNT_PER_EMOTION = 10;
-const manualFilenames = { energetic: [], tense: [], cheerful: [], dreamy: [], calm: [], sad: [], love: [] };
-
-// ✅ Google Sheets 웹앱 URL
-const GS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyowrSqY3hw71XR7qIqzAHyhm4iUnh27x-Q9qW3zmvboKudPemd3OQLLIaIs2SmX0XP/exec';
+const EXT = "mp3";
+const COUNT = 10;
+const GS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyowrSqY3hw71XR7qIqzAHyhm4iUnh27x-Q9qW3zmvboKudPemd3OQLLIaIs2SmX0XP/exec";
 
 /***********************
- * 유틸
+ * jsPsych init
  ***********************/
-function makeItemsForEmotion(key){
-  const files = [];
-  if(AUTO_FILENAMES){
-    for(let i=1;i<=COUNT_PER_EMOTION;i++){
-      const filename = `${key}${i}.${EXT}`;
-      const path = `${ROOT}/${key}/${filename}`;
-      files.push(encodeURI(path));
-    }
-  } else {
-    const list = manualFilenames[key] || [];
-    for(const name of list){
-      const path = `${ROOT}/${key}/${name}`;
-      files.push(encodeURI(path));
-    }
-  }
-  return files.map((path, idx)=>({ id: idx, path, name: decodeURI(path).split('/').slice(-1)[0] }));
-}
-
-async function sendBlockToSheet(payload){
-  if(!GS_WEBAPP_URL){
-    console.warn('GS_WEBAPP_URL 미설정. 업로드 생략.');
-    return;
-  }
-  try{
-    await fetch(GS_WEBAPP_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-  } catch(err){
-    console.error('업로드 실패:', err);
-  }
-}
-
-/***********************
- * jsPsych 초기화
- ***********************/
-if (typeof initJsPsych !== 'function') {
-  document.getElementById('jspsych-target').innerHTML =
-    '<p style="color:#b91c1c"><b>오류:</b> jsPsych 로드 실패. 네트워크 또는 CDN 차단을 확인하세요.</p>';
-  throw new Error('jsPsych not loaded');
-}
-
-const jsPsych = initJsPsych({ display_element: 'jspsych-target' });
+const jsPsych = initJsPsych({ display_element: "jspsych-target" });
 const timeline = [];
 
 /***********************
- * 참가자 ID 수집
+ * 참가자 정보
  ***********************/
 timeline.push({
   type: jsPsychSurveyHtmlForm,
-  preamble: `<h2>참가자 정보</h2><p class="muted">아래 정보를 입력한 뒤 시작하세요.</p>`,
+  preamble: `<h2>참가자 정보</h2>`,
   html: `
     <label>참가자 ID *</label><br>
-    <input name="pid" type="text" required style="width: 260px; padding:6px; margin:6px 0 12px 0;">
-    <br>
-    <label>사용 기기(선택)</label><br>
-    <select name="device" style="width: 260px; padding:6px; margin:6px 0 12px 0;">
-      <option value="">선택 안 함</option>
+    <input name="pid" type="text" required style="width:260px;padding:6px;"><br><br>
+    <label>기기</label><br>
+    <select name="device" style="width:260px;padding:6px;">
       <option>모바일(iOS)</option>
       <option>모바일(Android)</option>
       <option>데스크탑</option>
-      <option>태블릿</option>
     </select>
-    <div class="note" style="margin-top:8px;">오디오는 <b>원하는 만큼</b> 재생할 수 있습니다. 상은 <b>최대 5개 권장</b>(강제 아님)입니다.</div>
+    <div class="note" style="margin-top:8px;">상은 <b>최대 5개 권장</b>입니다.</div>
   `,
-  button_label: '시작하기',
-  on_finish: function(data){
-    const resp = JSON.parse(data.response);
-    jsPsych.data.addProperties({
-      pid: resp.pid,
-      device: resp.device||'',
-      ua: navigator.userAgent,
-      tz: Intl.DateTimeFormat().resolvedOptions().timeZone
-    });
+  button_label: "시작하기",
+  on_finish: d => {
+    const r = JSON.parse(d.response);
+    jsPsych.data.addProperties({ pid: r.pid, device: r.device });
   }
 });
 
 /***********************
- * 인스트럭션
+ * 안내문
  ***********************/
 timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `
     <h2>감정별 상/중/하 분류 실험</h2>
-    <p>각 감정(에너지가 넘치는, 불안한, 즐거운, 꿈꾸는 듯한, 평온한, 슬픈, 사랑에 빠진)에 대해 10곡을 듣고, 곡마다 <b>상/중/하</b>로 표시하세요.</p>
     <div class="note">
       <ul>
-        <li>각 곡은 <b>원하는 만큼</b> 다시 재생할 수 있습니다(동시 재생 방지 적용).</li>
-        <li><b>상은 최대 5개 권장</b>입니다(강제 아님).</li>
-        <li>총 <b>7페이지</b>(감정별 1페이지)로 진행됩니다.</li>
+        <li>각 곡은 원하는 만큼 재생 가능합니다.</li>
+        <li>상은 최대 5개 권장입니다(강제 아님).</li>
+        <li>총 7개 감정 페이지로 구성되어 있습니다.</li>
       </ul>
     </div>
   `,
-  choices: ['시작하기']
+  choices: ["시작"]
 });
 
 /***********************
- * 감정별 Likert(상/중/하) 블록
+ * 감정별 블록
  ***********************/
-function buildLikertBlock(emotion){
-  const items = makeItemsForEmotion(emotion.key);
-  const paths = items.map(it=>it.path);
+function buildBlock(emotion){
+  const paths = Array.from({length:COUNT},(_,i)=>`${ROOT}/${emotion.key}/${emotion.key}${i+1}.${EXT}`);
 
-  const preload = {
-    type: jsPsychPreload,
-    audio: paths,
-    message: `<p><b>${emotion.label_ko}</b> (${emotion.label_en}) 자극 로딩 중…</p>`,
-  };
+  const preload = { type: jsPsychPreload, audio: paths };
 
-  const likertTrial = {
+  const trial = {
     type: jsPsychHtmlButtonResponse,
-    stimulus: function(){
-      const others = EMOTIONS.filter(e=> e.key !== emotion.key).map(e=> e.label_ko).join(', ');
-      const listHtml = items.map((it, idx)=>{
-        const file = it.path.split('/').slice(-1)[0];
-        return `
-          <div class="audio-card" data-id="${it.id}">
-            <div class="note" style="margin-bottom:6px;">
-              <div>① “<b>${emotion.label_ko}</b>” 감정에 잘 맞는가?</div>
-              <div>② “<b>${others}</b>” 감정들과 헷갈리지 않는가?</div>
-            </div>
-            <div class="label">${idx+1}. ${file}</div>
-            <audio src="${it.path}" controls preload="auto" playsinline></audio>
-            <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
-              <button class="jspsych-btn bucket" data-bucket="TOP" type="button">상</button>
-              <button class="jspsych-btn bucket" data-bucket="MID" type="button">중</button>
-              <button class="jspsych-btn bucket" data-bucket="LOW" type="button">하</button>
-              <span class="muted" style="margin-left:auto;">선택: <span class="chosen">없음</span></span>
-            </div>
-          </div>`;
-      }).join('');
+    stimulus: () => {
+      const others = EMOTIONS.filter(e=>e.key!==emotion.key).map(e=>e.label_ko).join(", ");
+      const items = paths.map((p,i)=>`
+        <div class="audio-card" data-id="${i}">
+          <div class="note">
+            <ul>
+              <li>“<b>${emotion.label_ko}</b>” 감정에 잘 맞는가?</li>
+              <li>이 곡을 들었을 때 다른 감정(<b>${others}</b>) 6개와 헷갈리지 않고 <b>${emotion.label_ko}</b>을 선택할 수 있어야 함</li>
+            </ul>
+          </div>
+          <div class="label">${i+1}. ${p.split("/").pop()}</div>
+          <audio src="${p}" controls preload="auto" playsinline></audio>
+          <div style="margin-top:8px;display:flex;gap:8px;">
+            <button class="jspsych-btn bucket" data-bucket="TOP">상</button>
+            <button class="jspsych-btn bucket" data-bucket="MID">중</button>
+            <button class="jspsych-btn bucket" data-bucket="LOW">하</button>
+            <span class="muted" style="margin-left:auto;">선택: <span class="chosen">없음</span></span>
+          </div>
+        </div>`).join("");
 
       return `
-        <div class="container">
-          <div class="sticky-top">
-            <h3 style="margin:6px 0;">카테고리: <span class="pill">${emotion.label_ko}</span> <span class="muted">(${emotion.label_en})</span></h3>
-            <div class="muted" id="quota">권장: <b>상 최대 5개</b> (현재 상 0/5) · 중/하는 제한 없음</div>
-          </div>
-          <p style="margin:10px 0 6px 0;">각 음원을 들어보고 <b>상 / 중 / 하</b> 중 하나로 표기하세요. <b>상은 최대 5개 권장</b>(강제 아님).</p>
-          <div class="pair-wrap">${listHtml}</div>
-        </div>`;
+        <h3>카테고리: ${emotion.label_ko} (${emotion.label_en})</h3>
+        <p class="muted">상은 최대 5개 권장</p>
+        <div class="pair-wrap">${items}</div>`;
     },
-    choices: ['분류 완료'],
-    on_load: function(){
-      const counts = { TOP:0 };
-      const selection = {}; // id -> 'TOP'|'MID'|'LOW'
-      const btnGroup = document.getElementById('jspsych-html-button-response-btngroup');
-
-      const updateQuota = ()=>{
-        const q = document.getElementById('quota');
-        if(q){ q.innerHTML = `권장: <b>상 최대 5개</b> (현재 상 ${counts.TOP}/5) · 중/하는 제한 없음`; }
-        if(btnGroup){
-          const btn = btnGroup.querySelector('button');
-          if(btn){ btn.disabled = false; btn.textContent = '분류 완료'; }
-        }
-      };
-      updateQuota();
-
-      document.body.addEventListener('click', (e)=>{
-        const b = e.target.closest('button.bucket');
+    choices: ["분류 완료"],
+    on_load: () => {
+      const sel = {}; let topCount = 0;
+      document.body.addEventListener("click", e=>{
+        const b = e.target.closest("button.bucket");
         if(!b) return;
-        const card = b.closest('.audio-card');
-        if(!card) return;
-        const id = Number(card.getAttribute('data-id'));
-        const bucket = b.getAttribute('data-bucket');
-        const prev = selection[id];
-        if(prev === 'TOP') counts.TOP--;
-        selection[id] = bucket;
-        if(bucket === 'TOP') counts.TOP++;
-        const label = card.querySelector('.chosen');
-        if(label){ label.textContent = bucket==='TOP'?'상':bucket==='MID'?'중':'하'; }
-        updateQuota();
-      }, { passive:true });
-
-      // 동시에 재생 방지
-      const auds = Array.from(document.querySelectorAll('audio'));
-      auds.forEach(A=>{
-        A.addEventListener('play', ()=>{
-          auds.forEach(B=>{ if(B!==A && !B.paused) B.pause(); });
-        });
+        const card = b.closest(".audio-card");
+        const id = Number(card.dataset.id);
+        const prev = sel[id];
+        if(prev==="TOP") topCount--;
+        sel[id] = b.dataset.bucket;
+        if(b.dataset.bucket==="TOP") topCount++;
+        card.querySelector(".chosen").textContent = b.textContent;
       });
-
-      window.__likertSelection = { selection };
+      window._sel = sel;
     },
-    on_finish: async function(){
-      const sel = (window.__likertSelection && window.__likertSelection.selection) ? window.__likertSelection.selection : {};
-      const first = jsPsych.data.get().values()[0] || {};
-      const block_payload = {
-        kind: 'cowen7_likert_block',
-        pid: first.pid || '',
-        device: first.device || '',
-        ua: first.ua || navigator.userAgent,
-        tz: first.tz || Intl.DateTimeFormat().resolvedOptions().timeZone,
-        emotion_key: emotion.key,
-        emotion_label_ko: emotion.label_ko,
-        timestamp: new Date().toISOString(),
-        allocations: items.map(it=>({ file: it.name, path: it.path, bucket: (sel[it.id] ?? null) }))
-      };
-      await sendBlockToSheet(block_payload);
-
-      const result = items.map(it=>({ id: it.id, file: it.name, path: it.path, bucket: (sel[it.id] ?? null) }));
-      jsPsych.data.write({ trial_kind: 'emotion_likert', emotion: emotion.key, allocations: result });
+    on_finish: async () => {
+      const data = Object.entries(window._sel).map(([id,b])=>({id,bucket:b}));
+      jsPsych.data.write({ emotion: emotion.key, allocations: data });
+      await fetch(GS_WEBAPP_URL, {method:"POST",mode:"no-cors",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({kind:"cowen7_likert_block", emotion:emotion.key, allocations:data})});
     }
   };
 
-  const summary = {
-    type: jsPsychHtmlButtonResponse,
-    stimulus: function(){
-      const last = jsPsych.data.get().filter({trial_kind:'emotion_likert', emotion: emotion.key}).values().slice(-1)[0];
-      const arr = last ? last.allocations : [];
-      const g = { TOP:[], MID:[], LOW:[] };
-      arr.forEach(x=>{ if(x.bucket) g[x.bucket].push(x); });
-      const sect = (title, list)=>{
-        const rows = list.map((r)=>`<li>${r.file}</li>`).join('');
-        return `<h4 style="margin:12px 0 6px 0;">${title}</h4><ul>${rows||'<li class="muted">없음</li>'}</ul>`;
-      };
-      return `
-        <div class="container">
-          <h3>카테고리 결과: <span class="pill">${emotion.label_ko}</span> <span class="muted">(${emotion.label_en})</span></h3>
-          ${sect('상(Top)', g.TOP)}
-          ${sect('중(Mid)', g.MID)}
-          ${sect('하(Low)', g.LOW)}
-          <p class="muted">* 상은 최대 5개 권장이며, 강제하지 않습니다.</p>
-        </div>`;
-    },
-    choices: ['다음 카테고리로']
-  };
-
-  return [preload, likertTrial, summary];
+  return [preload, trial];
 }
 
-/***********************
- * 타임라인 구성
- ***********************/
-EMOTIONS.forEach(em => timeline.push(...buildLikertBlock(em)));
+EMOTIONS.forEach(e => timeline.push(...buildBlock(e)));
 
+/***********************
+ * 종료화면
+ ***********************/
 timeline.push({
   type: jsPsychHtmlButtonResponse,
-  stimulus: `
-    <h2>실험 종료</h2>
-    <p>참여해 주셔서 감사합니다. 데이터가 서버(구글시트)에 저장되었습니다.</p>
-    <p class="muted">※ 연구자용: 문제가 있을 경우를 대비하여 로컬 CSV 백업을 추가로 저장할 수 있습니다.</p>
-  `,
-  choices: ['CSV 백업 다운로드', '완료'],
-  on_finish: async function(data){
-    const csv = jsPsych.data.get().csv();
-    const blob = new Blob([csv], {type:'text/csv'});
+  stimulus: `<h2>감사합니다!</h2><p>결과가 저장되었습니다.</p>`,
+  choices: ["CSV 다운로드"],
+  on_finish: () => {
+    const blob = new Blob([jsPsych.data.get().csv()],{type:"text/csv"});
     const url = URL.createObjectURL(blob);
-    if(data.response === 0){
-      const a = document.createElement('a');
-      a.href = url; a.download = `cowen7_likert_${Date.now()}.csv`;
-      a.click();
-    }
-    const first = jsPsych.data.get().values()[0] || {};
-    const full_payload = {
-      kind: 'cowen7_likert_full',
-      pid: first.pid || '',
-      device: first.device || '',
-      ua: first.ua || navigator.userAgent,
-      tz: first.tz || Intl.DateTimeFormat().resolvedOptions().timeZone,
-      timestamp: new Date().toISOString(),
-      data: jsPsych.data.get().values()
-    };
-    await sendBlockToSheet(full_payload);
+    const a = document.createElement("a");
+    a.href = url; a.download = `cowen7_${Date.now()}.csv`;
+    a.click();
   }
 });
 
-/***********************
- * 시작
- ***********************/
 jsPsych.run(timeline);
 </script>
 </body>
