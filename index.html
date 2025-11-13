@@ -67,9 +67,31 @@ const EXT = "mp3";
 const COUNT = 10;
 const GS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyowrSqY3hw71XR7qIqzAHyhm4iUnh27x-Q9qW3zmvboKudPemd3OQLLIaIs2SmX0XP/exec";
 
+/* 참가자 관련 전역 (롱 포맷용) */
+let PARTICIPANT_GROUP = null;
+let PARTICIPANT_ID = `P${Date.now()}_${Math.floor(Math.random()*1e6)}`;
+let ALL_ROWS = [];
+
 /* ===== jsPsych ===== */
 const jsPsych = initJsPsych({ display_element: "jspsych-target" });
+jsPsych.data.addProperties({ participant_id: PARTICIPANT_ID });
+
 const timeline = [];
+
+/* ===== 전공 여부 질문 (수정사항3) ===== */
+timeline.push({
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <h2>간단한 질문</h2>
+    <p>아래에서 본인의 전공 여부를 선택해 주세요.</p>
+  `,
+  choices: ["음악 전공", "음악 비전공"],
+  on_finish: (data) => {
+    const group = data.response === 0 ? "music_major" : "non_music_major";
+    PARTICIPANT_GROUP = group;
+    jsPsych.data.addProperties({ participant_group: group });
+  }
+});
 
 /* ===== 안내 ===== */
 timeline.push({
@@ -96,14 +118,18 @@ function buildBlock(emotion){
     type: jsPsychHtmlButtonResponse,
     data: { emotion: emotion.key },          // ✅ 이후 addToLast로 병합
     stimulus: () => {
-      const others = EMOTIONS.filter(e=>e.key!==emotion.key).map(e=>e.label_ko).join(", ");
+      const others = EMOTIONS
+        .filter(e => e.key !== emotion.key)
+        .map(e => `'${e.label_ko}'`)
+        .join(", ");
       const items = paths.map((p,i)=>`
         <div class="audio-card" data-id="${i}">
           <div class="note">
-            <ul style="margin:0 0 6px 16px;">
-              <li>“<b>${emotion.label_ko}</b>” 감정에 잘 맞는가?</li>
-              <li>이 곡을 들었을 때 다른 감정(<b>${others}</b>) 6개와 헷갈리지 않고 <b>${emotion.label_ko}</b>을 선택할 수 있어야 함</li>
-            </ul>
+            <p style="margin:0 0 4px 0;"><b>&lt;판단 기준&gt;</b></p>
+            <ol style="margin:0 0 0 16px; padding-left:16px;">
+              <li>“<b>${emotion.label_ko}</b>” 감정을 잘 표현하고 있는가?</li>
+              <li>이 곡을 들었을 때 다른 감정(${others}) 6개와 헷갈리지 않고 '<b>${emotion.label_ko}</b>'를 선택할 수 있을 만한가?</li>
+            </ol>
           </div>
           <div><b>${i+1}. ${p.split("/").pop()}</b></div>
           <audio src="${p}" controls preload="metadata" playsinline></audio>
@@ -162,15 +188,43 @@ function buildBlock(emotion){
     on_finish: () => {
       const data = Object.entries(window.__currentSel||{}).map(([id,s])=>({id:Number(id),score:s}));
 
-      // ✅ v7 안전한 추가 방법: 마지막 트라이얼에 병합
-      jsPsych.data.get().addToLast({ allocations: data });
+      /* ===== 롱 포맷 row 생성 (수정사항2) ===== */
+      const rows = data.map(({id, score}) => {
+        const filePath = paths[id];
+        const fileName = filePath.split("/").pop();
+        return {
+          participant_id: PARTICIPANT_ID,
+          participant_group: PARTICIPANT_GROUP,
+          emotion_key: emotion.key,
+          emotion_label_ko: emotion.label_ko,
+          file_path: filePath,
+          file_name: fileName,
+          index_in_emotion: id + 1,
+          score: score
+        };
+      });
 
-      // 업로드는 fire-and-forget (대기하지 않음 → 다음 블록 즉시 진행)
+      // jsPsych 마지막 trial에 병합 저장
+      jsPsych.data.get().addToLast({
+        allocations: data,
+        rows: rows
+      });
+
+      // 전체 rows 전역 누적
+      ALL_ROWS = ALL_ROWS.concat(rows);
+
+      // 블록 단위 업로드 (옵션, fire-and-forget)
       try{
         fetch(GS_WEBAPP_URL, {
           method:"POST", mode:"no-cors",
           headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify({ kind:"cowen7_rating_block", emotion: emotion.key, allocations: data })
+          body: JSON.stringify({
+            kind:"cowen7_rating_block_long",
+            emotion: emotion.key,
+            participant_id: PARTICIPANT_ID,
+            participant_group: PARTICIPANT_GROUP,
+            rows: rows
+          })
         });
       }catch(e){ /* 무시 */ }
     }
@@ -187,15 +241,17 @@ timeline.push({
   stimulus: `<h2>감사합니다!</h2><p>결과가 저장되었습니다.</p>`,
   choices: ["닫기"],
   on_finish: () => {
-    // 전체 백업 (fire-and-forget)
+    // 전체 롱 포맷 백업 (fire-and-forget, 수정사항2)
     try{
       fetch(GS_WEBAPP_URL, {
         method: "POST",
         mode: "no-cors",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          kind: "cowen7_rating_full",
-          data: jsPsych.data.get().values()
+          kind: "cowen7_rating_full_long",
+          participant_id: PARTICIPANT_ID,
+          participant_group: PARTICIPANT_GROUP,
+          rows: ALL_ROWS
         })
       });
     } catch(e) {
