@@ -82,8 +82,8 @@ const timeline = [];
 timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `
-    <h2>간단한 질문</h2>
-    <p>아래에서 본인의 전공 여부를 선택해 주세요.</p>
+    <h2>시작하기 전</h2>
+    <p>본인의 전공 여부를 선택해 주세요.</p>
   `,
   choices: ["음악 전공", "음악 비전공"],
   on_finish: (data) => {
@@ -112,27 +112,42 @@ timeline.push({
 
 /* ===== 감정 블록 (5점 척도) ===== */
 function buildBlock(emotion){
-  const paths = Array.from({length:COUNT},(_,i)=>`${ROOT}/${emotion.key}/${emotion.key}${i+1}.${EXT}`);
+  // 곡 정보 배열 생성
+  const items = Array.from({length:COUNT}, (_,i) => {
+    const idx = i + 1;
+    const path = `${ROOT}/${emotion.key}/${emotion.key}${idx}.${EXT}`;
+    return {
+      id: i,                          // 고정 ID (0~COUNT-1)
+      index_in_emotion: idx,          // 감정 내 번호 (1~COUNT)
+      path: path,
+      file_name: `${emotion.key}${idx}.${EXT}`,
+      file_path: path
+    };
+  });
+
+  // 한 감정 안에서 곡 순서 랜덤
+  const shuffled = items.slice().sort(() => Math.random() - 0.5);
 
   return [{
     type: jsPsychHtmlButtonResponse,
-    data: { emotion: emotion.key },          // ✅ 이후 addToLast로 병합
+    data: { emotion: emotion.key },
     stimulus: () => {
       const others = EMOTIONS
         .filter(e => e.key !== emotion.key)
         .map(e => `'${e.label_ko}'`)
         .join(", ");
-      const items = paths.map((p,i)=>`
-        <div class="audio-card" data-id="${i}">
+
+      const cards = shuffled.map((item, idx) => `
+        <div class="audio-card" data-item-id="${item.id}">
           <div class="note">
             <p style="margin:0 0 4px 0;"><b>&lt;판단 기준&gt;</b></p>
             <ol style="margin:0 0 0 16px; padding-left:16px;">
               <li>“<b>${emotion.label_ko}</b>” 감정을 잘 표현하고 있는가?</li>
-              <li>이 곡을 들었을 때 다른 감정<b>(${others})<b> 6개와 헷갈리지 않고 '<b>${emotion.label_ko}</b>'을 선택할 수 있을 만한가?</li>
+              <li>이 곡을 들었을 때 다른 감정(${others}) 6개와 헷갈리지 않고 '<b>${emotion.label_ko}</b>'를 선택할 수 있을 만한가?</li>
             </ol>
           </div>
-          <div><b>${i+1}. ${p.split("/").pop()}</b></div>
-          <audio src="${p}" controls preload="metadata" playsinline></audio>
+          <div><b>곡 ${idx+1}</b></div>
+          <audio src="${item.path}" controls preload="metadata" playsinline></audio>
           <div class="scale" role="group" aria-label="적절성 5점 척도">
             <span class="label muted">(부적절함)</span>
             <div class="nums">
@@ -140,19 +155,22 @@ function buildBlock(emotion){
             </div>
             <span class="label muted">(적절함)</span>
           </div>
-        </div>`).join("");
+        </div>
+      `).join("");
 
-      return `<h3>${emotion.label_ko} <span class="muted">(${emotion.label_en})</span></h3>
-              <p class="muted" id="remain">미평가 곡: ${COUNT}</p>
-              <div class="pair-wrap" id="pair-wrap">${items}</div>`;
+      return `
+        <h3>${emotion.label_ko} <span class="muted">(${emotion.label_en})</span></h3>
+        <p class="muted" id="remain">미평가 곡: ${COUNT}</p>
+        <div class="pair-wrap" id="pair-wrap">${cards}</div>
+      `;
     },
     choices: ["평가 완료"],
     on_load: () => {
-      const wrap     = document.getElementById('pair-wrap');   // ✅ 컨테이너 단위 바인딩 (누적/충돌 방지)
+      const wrap     = document.getElementById('pair-wrap');
       const btnGroup = document.getElementById('jspsych-html-button-response-btngroup');
       const doneBtn  = btnGroup ? btnGroup.querySelector('button') : null;
       const remainEl = document.getElementById('remain');
-      const sel = {};  // id -> score
+      const sel = {};  // item.id -> score
 
       function updateButton(){
         const remain = COUNT - Object.keys(sel).length;
@@ -164,69 +182,69 @@ function buildBlock(emotion){
       }
       updateButton();
 
-      // 점수 클릭 (컨테이너 위임)
-      wrap.addEventListener('click', (e)=>{
-        const b = e.target.closest('button.score');
-        if(!b) return;
-        const card = b.closest('.audio-card');
-        const id = Number(card.dataset.id);
-        const score = Number(b.dataset.score);
-        sel[id] = score;
-        // 선택 표시 토글
-        card.querySelectorAll('button.score').forEach(x=>x.classList.remove('selected'));
-        b.classList.add('selected');
-        updateButton();
-      }, { passive:true });
+      // 점수 클릭 (컨테이너 이벤트 위임)
+      if(wrap){
+        wrap.addEventListener('click', (e)=>{
+          const b = e.target.closest('button.score');
+          if(!b) return;
+          const card = b.closest('.audio-card');
+          if(!card) return;
+          const itemId = Number(card.dataset.itemId);
+          const score  = Number(b.dataset.score);
+          sel[itemId] = score;
 
-      // 동시에 재생 방지
-      const auds = Array.from(wrap.querySelectorAll('audio'));
-      auds.forEach(A=>A.addEventListener('play', ()=>auds.forEach(B=>{ if(B!==A && !B.paused) B.pause(); })));
+          // 선택 표시 갱신
+          card.querySelectorAll('button.score').forEach(x=>x.classList.remove('selected'));
+          b.classList.add('selected');
 
-      // 다음 단계에서 읽기
+          updateButton();
+        }, { passive:true });
+
+        // 동시에 한 곡만 재생
+        const auds = Array.from(wrap.querySelectorAll('audio'));
+        auds.forEach(A => {
+          A.addEventListener('play', () => {
+            auds.forEach(B => {
+              if(B !== A && !B.paused) B.pause();
+            });
+          });
+        });
+      }
+
+      // 다음 단계에서 사용할 수 있도록 저장
       window.__currentSel = sel;
+      window.__currentItems = items;  // 이 블록의 items 정보
     },
     on_finish: () => {
-      const data = Object.entries(window.__currentSel||{}).map(([id,s])=>({id:Number(id),score:s}));
+      const sel = window.__currentSel || {};
+      const itemsRef = window.__currentItems || items;
 
-      /* ===== 롱 포맷 row 생성 (수정사항2) ===== */
-      const rows = data.map(({id, score}) => {
-        const filePath = paths[id];
-        const fileName = filePath.split("/").pop();
+      // sel: { itemId: score } → long-format rows
+      const rows = Object.entries(sel).map(([itemIdStr, score]) => {
+        const itemId = Number(itemIdStr);
+        const item = itemsRef[itemId];
         return {
           participant_id: PARTICIPANT_ID,
           participant_group: PARTICIPANT_GROUP,
           emotion_key: emotion.key,
           emotion_label_ko: emotion.label_ko,
-          file_path: filePath,
-          file_name: fileName,
-          index_in_emotion: id + 1,
-          score: score
+          file_path: item.file_path,
+          file_name: item.file_name,
+          index_in_emotion: item.index_in_emotion,
+          score: Number(score)
         };
       });
 
-      // jsPsych 마지막 trial에 병합 저장
+      // jsPsych trial에 메타 저장
       jsPsych.data.get().addToLast({
-        allocations: data,
+        allocations: sel,
         rows: rows
       });
 
       // 전체 rows 전역 누적
       ALL_ROWS = ALL_ROWS.concat(rows);
 
-      // 블록 단위 업로드 (옵션, fire-and-forget)
-      try{
-        fetch(GS_WEBAPP_URL, {
-          method:"POST", mode:"no-cors",
-          headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify({
-            kind:"cowen7_rating_block_long",
-            emotion: emotion.key,
-            participant_id: PARTICIPANT_ID,
-            participant_group: PARTICIPANT_GROUP,
-            rows: rows
-          })
-        });
-      }catch(e){ /* 무시 */ }
+      // 블록 단위 업로드는 생략 (끝에서 한 번만 롱 포맷 전송)
     }
   }];
 }
@@ -241,17 +259,16 @@ timeline.push({
   stimulus: `<h2>감사합니다!</h2><p>결과가 저장되었습니다.</p>`,
   choices: ["닫기"],
   on_finish: () => {
-    // 전체 롱 포맷 백업 (fire-and-forget, 수정사항2)
+    // 전체 롱 포맷 백업 (수정사항2: long format만 전송)
     try{
       fetch(GS_WEBAPP_URL, {
         method: "POST",
         mode: "no-cors",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          kind: "cowen7_rating_full_long",
-          participant_id: PARTICIPANT_ID,
-          participant_group: PARTICIPANT_GROUP,
-          rows: ALL_ROWS
+          kind: "cowen7_rating_full",   // 예전과 동일한 kind 이름 사용
+          format: "long",               // (옵션) 형식 표시용
+          data: ALL_ROWS                // 🔴 롱 포맷: 각 row = 한 자극-한 점수
         })
       });
     } catch(e) {
@@ -259,7 +276,6 @@ timeline.push({
     }
   }
 });
-
 
 jsPsych.run(timeline);
 </script>
