@@ -5,7 +5,7 @@
   <title>Cowen7 감정 실험 (5점 척도)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- jsPsych CSS (원하면 로컬로 교체 가능) -->
+  <!-- jsPsych CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/css/jspsych.css" />
 
   <!-- ✅ 로컬 jsPsych 스크립트 -->
@@ -36,7 +36,7 @@
   <div id="jspsych-target"></div>
 
 <script>
-/* 전역 에러 캡처: 에러 발생 시 화면에 원인 표시 */
+/* 전역 에러 캡처 */
 window.addEventListener('error', (e)=>{
   const m = document.getElementById('jspsych-target');
   if(m){
@@ -70,6 +70,8 @@ const GS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyowrSqY3hw71XR7q
 /* 참가자 관련 전역 (롱 포맷용) */
 let PARTICIPANT_GROUP = null;
 let PARTICIPANT_ID = `P${Date.now()}_${Math.floor(Math.random()*1e6)}`;
+
+/* 여기 ALL_ROWS가 "한 행 = 한 자극" 구조 */
 let ALL_ROWS = [];
 
 /* ===== jsPsych ===== */
@@ -78,12 +80,12 @@ jsPsych.data.addProperties({ participant_id: PARTICIPANT_ID });
 
 const timeline = [];
 
-/* ===== 전공 여부 질문 (수정사항3) ===== */
+/* ===== 전공 여부 질문 ===== */
 timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `
-    <h2>시작하기 전</h2>
-    <p>본인의 전공 여부를 선택해 주세요.</p>
+    <h2>간단한 질문</h2>
+    <p>아래에서 본인의 전공 여부를 선택해 주세요.</p>
   `,
   choices: ["음악 전공", "음악 비전공"],
   on_finish: (data) => {
@@ -112,20 +114,20 @@ timeline.push({
 
 /* ===== 감정 블록 (5점 척도) ===== */
 function buildBlock(emotion){
-  // 곡 정보 배열 생성
+  // 이 감정에 해당하는 10개 파일 정의
   const items = Array.from({length:COUNT}, (_,i) => {
     const idx = i + 1;
     const path = `${ROOT}/${emotion.key}/${emotion.key}${idx}.${EXT}`;
     return {
-      id: i,                          // 고정 ID (0~COUNT-1)
-      index_in_emotion: idx,          // 감정 내 번호 (1~COUNT)
+      id: i,                          // 내부 ID (0~COUNT-1)
+      index_in_emotion: idx,          // 해당 감정 내 번호 (1~COUNT)
       path: path,
       file_name: `${emotion.key}${idx}.${EXT}`,
       file_path: path
     };
   });
 
-  // 한 감정 안에서 곡 순서 랜덤
+  // 한 감정 안에서 곡 순서 랜덤 셔플
   const shuffled = items.slice().sort(() => Math.random() - 0.5);
 
   return [{
@@ -182,8 +184,8 @@ function buildBlock(emotion){
       }
       updateButton();
 
-      // 점수 클릭 (컨테이너 이벤트 위임)
       if(wrap){
+        // 점수 클릭 (이벤트 위임)
         wrap.addEventListener('click', (e)=>{
           const b = e.target.closest('button.score');
           if(!b) return;
@@ -193,7 +195,7 @@ function buildBlock(emotion){
           const score  = Number(b.dataset.score);
           sel[itemId] = score;
 
-          // 선택 표시 갱신
+          // 선택 표시
           card.querySelectorAll('button.score').forEach(x=>x.classList.remove('selected'));
           b.classList.add('selected');
 
@@ -211,15 +213,14 @@ function buildBlock(emotion){
         });
       }
 
-      // 다음 단계에서 사용할 수 있도록 저장
       window.__currentSel = sel;
-      window.__currentItems = items;  // 이 블록의 items 정보
+      window.__currentItems = items;  // 이 감정 블록의 원래 아이템 정보
     },
     on_finish: () => {
       const sel = window.__currentSel || {};
       const itemsRef = window.__currentItems || items;
 
-      // sel: { itemId: score } → long-format rows
+      // sel: { itemId: score } → "한 행 = 한 자극" 구조의 row로 변환
       const rows = Object.entries(sel).map(([itemIdStr, score]) => {
         const itemId = Number(itemIdStr);
         const item = itemsRef[itemId];
@@ -235,21 +236,19 @@ function buildBlock(emotion){
         };
       });
 
-      // jsPsych trial에 메타 저장
+      // jsPsych trial에도 저장
       jsPsych.data.get().addToLast({
         allocations: sel,
         rows: rows
       });
 
-      // 전체 rows 전역 누적
+      // 전역 누적 (마지막에 한 번에 전송)
       ALL_ROWS = ALL_ROWS.concat(rows);
-
-      // 블록 단위 업로드는 생략 (끝에서 한 번만 롱 포맷 전송)
     }
   }];
 }
 
-/* 감정 순서 무작위 */
+/* 감정 블록 순서 무작위 */
 const order = EMOTIONS.slice().sort(()=>Math.random()-0.5);
 order.forEach(e => timeline.push(...buildBlock(e)));
 
@@ -259,16 +258,18 @@ timeline.push({
   stimulus: `<h2>감사합니다!</h2><p>결과가 저장되었습니다.</p>`,
   choices: ["닫기"],
   on_finish: () => {
-    // 전체 롱 포맷 백업 (수정사항2: long format만 전송)
+    /* 🔴 여기서 "롱 포맷" 배열을 그대로 전송
+       ALL_ROWS = [ { participant_id, participant_group, emotion_key, file_name, file_path, index_in_emotion, score }, ... ]
+       → 구글 시트에서는 이 배열을 한 줄씩 appendRow 하면 됨.
+    */
     try{
       fetch(GS_WEBAPP_URL, {
         method: "POST",
         mode: "no-cors",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          kind: "cowen7_rating_full",   // 예전과 동일한 kind 이름 사용
-          format: "long",               // (옵션) 형식 표시용
-          data: ALL_ROWS                // 🔴 롱 포맷: 각 row = 한 자극-한 점수
+          kind: "cowen7_rating_full_long",
+          rows: ALL_ROWS
         })
       });
     } catch(e) {
