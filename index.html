@@ -84,7 +84,7 @@ const timeline = [];
 timeline.push({
   type: jsPsychHtmlButtonResponse,
   stimulus: `
-    <h2>간단한 질문</h2>
+    <h2>시작하기에 앞서</h2>
     <p>아래에서 본인의 전공 여부를 선택해 주세요.</p>
   `,
   choices: ["음악 전공", "음악 비전공"],
@@ -145,7 +145,7 @@ function buildBlock(emotion){
             <p style="margin:0 0 4px 0;"><b>&lt;판단 기준&gt;</b></p>
             <ol style="margin:0 0 0 16px; padding-left:16px;">
               <li>“<b>${emotion.label_ko}</b>” 감정을 잘 표현하고 있는가?</li>
-              <li>이 곡을 들었을 때 다른 감정(${others}) 6개와 헷갈리지 않고 '<b>${emotion.label_ko}</b>'를 선택할 수 있을 만한가?</li>
+              <li>이 곡을 들었을 때 다른 감정(${others}) 6개와 헷갈리지 않고 '<b>${emotion.label_ko}</b>'을 선택할 수 있을 만한가?</li>
             </ol>
           </div>
           <div><b>곡 ${idx+1}</b></div>
